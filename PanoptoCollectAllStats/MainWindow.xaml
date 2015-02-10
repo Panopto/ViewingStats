@@ -1,0 +1,28 @@
+﻿<Window x:Class="PanoptoCollectAllStats.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Collect Panopto Stats" Height="390" Width="550" Icon="Logo-PanoptoGlobe.png" ResizeMode="CanMinimize">
+
+    <Border BorderBrush="#FF259216" BorderThickness="3">
+        <Grid Margin="0,0,0,0">
+            <GroupBox BorderBrush="LightBlue" Header="Login" VerticalAlignment="Top" Margin="5,0" BorderThickness="2.5" >
+                <Grid>
+                    <Label Content="User Name:" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="74" RenderTransformOrigin="0.5,0.5" Height="25"/>
+                    <TextBox x:Name="UserID" HorizontalAlignment="Left" Margin="135,10,0,0" TextWrapping="Wrap" Text="admin" VerticalAlignment="Top" Width="271" Height="25"/>
+                    <Label Content="Password:" HorizontalAlignment="Left" Height="25" Margin="10,45,0,0" VerticalAlignment="Top" Width="65"/>
+                    <PasswordBox x:Name="UserPassword" HorizontalAlignment="Left" Height="25" Margin="134,45,0,0" VerticalAlignment="Top" Width="271" Password=""/>
+
+                    <Label x:Name="ErrorLogLabel" Content="Error Log:" HorizontalAlignment="Left" Height="25" Margin="10,115,0,0" VerticalAlignment="Top" Padding="5" />
+                    <ScrollViewer HorizontalAlignment="Left" Height="122" Margin="134,120,0,0" VerticalAlignment="Top" Width="350" Padding="0" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="ErrorLog" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    </ScrollViewer>
+                </Grid>
+            </GroupBox>
+
+            <Button x:Name="Query" Content="Query for Stats" Height="29" Margin="0,0,0,45" VerticalAlignment="Bottom" Width="121" Click="Create_Click"/>
+            <StatusBar x:Name="StatusBar" Height="35" Margin="0,282,0,0" VerticalAlignment="Bottom">
+                <Label x:Name="Status" Content="Ready"/>
+            </StatusBar>
+        </Grid>
+    </Border>
+</Window>
