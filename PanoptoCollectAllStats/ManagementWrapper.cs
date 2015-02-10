@@ -49,44 +49,51 @@ namespace PanoptoCollectAllStats
                 sessionID, 
                 pagination, 
                 new DateTime(2015, 1, 1), // Years ago
-                currentTime.AddSeconds(-1)); // Today
+                currentTime.AddHours(-10)); // Today
 
             if (   usageResponse != null
                 && usageResponse.TotalNumberResponses > 0)
             {
                 foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
                 {
-                    string userId = responseItem.UserId.ToString();
-                    string username = userId;
-                    if (AllUserIds.ContainsKey(userId))
-                    {
-                        username = AllUserIds[userId];
-                    }
-                    else
-                    {
-                        // Get the username.
-                        username = GetUserNameFromId(authUserKey, authPassword, responseItem.UserId);
-                    }
 
-                    // Session ID, Session Name, username, start position, length, date, Folder
-                    string usageFormat = "{0}, {1}, {2} , {3}, {4}, {5}, {6}, {7} \n";
-                    string individualStatsString = String.Format(
-                        usageFormat,
-                        sessionID.ToString(),
+                    sessionStats += PrintStatsData(
+                        authUserKey, 
+                        authPassword, 
+                        responseItem,
+                        sessionID,
                         sessionName,
-                        username,
-                        responseItem.StartPosition,
-                        responseItem.SecondsViewed,
-                        responseItem.SecondsViewed / sessionLength * 100,
-                        responseItem.Time,
-                        folderName);
-                    sessionStats += individualStatsString;
+                        folderName,
+                        sessionLength);
                 }
 
                 if (usageResponse.TotalNumberResponses > usageResponse.PagedResponses.Length)
                 {
+                    int totalPages = usageResponse.TotalNumberResponses / MaxPerPage;
                     // Get more data
+                    for (int page = 1; page < totalPages; page++)
+                    {
+                        pagination.PageNumber = page;
+                        usageResponse = urc.GetSessionDetailedUsage(
+                            usageAuth,
+                            sessionID,
+                            pagination,
+                            new DateTime(2015, 1, 1), // Years ago
+                            currentTime.AddHours(-10)); // Today
 
+                        foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
+                        {
+
+                            sessionStats += PrintStatsData(
+                                authUserKey,
+                                authPassword,
+                                responseItem,
+                                sessionID,
+                                sessionName,
+                                folderName,
+                                sessionLength);
+                        }
+                    }
                 }
 
             }
@@ -98,6 +105,43 @@ namespace PanoptoCollectAllStats
             }
 
             return sessionStats;
+        }
+
+        private static string PrintStatsData(
+            string authUserKey, 
+            string authPassword, 
+            DetailedUsageResponseItem responseItem,
+            Guid sessionID,
+            string sessionName,
+            string folderName,
+            double? sessionLength)
+        {
+            string userId = responseItem.UserId.ToString();
+            string username = userId;
+            if (AllUserIds.ContainsKey(userId))
+            {
+                username = AllUserIds[userId];
+            }
+            else
+            {
+                // Get the username.
+                username = GetUserNameFromId(authUserKey, authPassword, responseItem.UserId);
+                // Save it for later.
+                AllUserIds[userId] = username;
+            }
+
+            // Session ID, Session Name, username, start position, length, date, Folder
+            string usageFormat = "{0}, {1}, {2} , {3}, {4}, {5}, {6}, {7} \n";
+            return String.Format(
+                usageFormat,
+                sessionID.ToString(),
+                sessionName,
+                username,
+                responseItem.StartPosition,
+                responseItem.SecondsViewed,
+                responseItem.SecondsViewed / sessionLength * 100,
+                responseItem.Time,
+                folderName);
         }
 
         private static string GetUserNameFromId(string authUserKey, string authPassword, Guid userGuid)
@@ -150,8 +194,24 @@ namespace PanoptoCollectAllStats
                     Session[] sessions = sessionsResponse.Results;
                     foreach (Session session in sessions)
                     {
-                        //sessionIds.Add(sessionGuid);
                         sessionStats += GetAllStatsForSession(authUserKey, authPassword, session.Id, session.Name, session.FolderName, session.Duration);
+                    }
+
+                    if (sessionsResponse.TotalNumberResults > MaxPerPage)
+                    {
+                        int totalPages = sessionsResponse.TotalNumberResults / MaxPerPage;
+                        for (int page = 1; page < totalPages; page++)
+                        {
+                            request.Pagination.PageNumber = page;
+
+                            sessionsResponse = smc.GetSessionsList(sessionAuth, request, null);
+
+                            sessions = sessionsResponse.Results;
+                            foreach (Session session in sessions)
+                            {
+                                sessionStats += GetAllStatsForSession(authUserKey, authPassword, session.Id, session.Name, session.FolderName, session.Duration);
+                            }
+                        }
                     }
                 }
 
@@ -166,7 +226,6 @@ namespace PanoptoCollectAllStats
                 errorMessage = "Please enter username and password.";
             }
 
-            //return sessionIds;
             return sessionStats;
         }
     }
