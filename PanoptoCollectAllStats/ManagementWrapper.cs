@@ -3,6 +3,7 @@ using PanoptoCollectAllStats.UserManagement;
 using PanoptoCollectAllStats.UsageReporting;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Sample C# that uses the Panopto PublicAPI
@@ -14,11 +15,13 @@ namespace PanoptoCollectAllStats
     public class ManagementWrapper
     {
         private static int MaxPerPage = 25;
+        private static int SegmentCount = 100;
         private static Dictionary<string, string> AllUserIds = new Dictionary<string, string>();
 
         public static string GetAllStatsForSession(string authUserKey, string authPassword, Guid sessionID, string sessionName, string folderName, double? sessionLength)
         {
             string sessionStats = String.Empty;
+            List<DetailedUsageResponseItem> allResponsesForSession = new List<DetailedUsageResponseItem>();
 
             // Get detailed stats
             // Permissions for user management
@@ -44,79 +47,148 @@ namespace PanoptoCollectAllStats
             pagination.PageNumber = 0;
             DateTime currentTime = DateTime.Now;
 
-            DetailedUsageResponse usageResponse = urc.GetSessionDetailedUsage(
-                usageAuth, 
-                sessionID, 
-                pagination, 
-                new DateTime(2015, 1, 1), // Years ago
-                currentTime.AddHours(-10)); // Today
-
-            if (   usageResponse != null
-                && usageResponse.TotalNumberResponses > 0)
+            try
             {
-                foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
-                {
+                DetailedUsageResponse usageResponse = urc.GetSessionDetailedUsage(
+                    usageAuth,
+                    sessionID,
+                    pagination,
+                    new DateTime(2015, 1, 1), // Needs a good start date picker
+                    currentTime.AddDays(-1)); // Yesterday
 
-                    sessionStats += PrintStatsData(
-                        authUserKey, 
-                        authPassword, 
-                        responseItem,
-                        sessionID,
-                        sessionName,
-                        folderName,
-                        sessionLength);
-                }
-
-                if (usageResponse.TotalNumberResponses > usageResponse.PagedResponses.Length)
+                if (usageResponse != null
+                    && usageResponse.TotalNumberResponses > 0)
                 {
-                    int totalPages = usageResponse.TotalNumberResponses / MaxPerPage;
-                    // Get more data
-                    for (int page = 1; page < totalPages; page++)
+                    foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
                     {
-                        pagination.PageNumber = page;
-                        usageResponse = urc.GetSessionDetailedUsage(
-                            usageAuth,
-                            sessionID,
-                            pagination,
-                            new DateTime(2015, 1, 1), // Years ago
-                            currentTime.AddHours(-10)); // Today
+                        allResponsesForSession.Add(responseItem);
+                    }
 
-                        foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
+                    if (usageResponse.TotalNumberResponses > usageResponse.PagedResponses.Length)
+                    {
+                        int totalPages = usageResponse.TotalNumberResponses / MaxPerPage;
+                        // Get more data
+                        for (int page = 1; page < totalPages; page++)
                         {
+                            pagination.PageNumber = page;
+                            usageResponse = urc.GetSessionDetailedUsage(
+                                usageAuth,
+                                sessionID,
+                                pagination,
+                                new DateTime(2015, 1, 1), // Years ago
+                                currentTime.AddHours(-10)); // Today
 
+                            foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
+                            {
+                                allResponsesForSession.Add(responseItem);
+                            }
+                        }
+                    }
+
+                    // If we have any stats, collate them by user
+                    if (allResponsesForSession.Count > 0)
+                    {
+                        Dictionary<Guid, DateTime> userViewDates;
+                        Dictionary<Guid, bool[]> userStatsCollection = CollateStatsByUser(allResponsesForSession, sessionLength, out userViewDates);
+                        foreach (KeyValuePair<Guid, bool[]> userStat in userStatsCollection)
+                        {
                             sessionStats += PrintStatsData(
                                 authUserKey,
                                 authPassword,
-                                responseItem,
+                                userStat,
                                 sessionID,
                                 sessionName,
                                 folderName,
-                                sessionLength);
+                                userViewDates[userStat.Key]);
                         }
+
                     }
+
                 }
-
+                else
+                {
+                    string noneFormat = "{0}, {1}, none,,, {2}\n";
+                    sessionStats = String.Format(noneFormat, sessionID.ToString(), sessionName, folderName);
+                }
             }
-            else
+            catch (Exception e)
             {
-                string noneFormat = "{0}, {1}, none,,,,, {2}, \n";
-
-                sessionStats = String.Format(noneFormat, sessionID.ToString(), sessionName, folderName);
             }
+
 
             return sessionStats;
         }
 
+        private static Dictionary<Guid, bool[]> CollateStatsByUser(List<DetailedUsageResponseItem> allResponsesForSession, double? sessionLength, out Dictionary<Guid, DateTime> lastViews)
+        {
+            // Map usernames to segments watched.
+            Dictionary<Guid, bool[]> userStats = new Dictionary<Guid, bool[]>();
+            lastViews = new Dictionary<Guid, DateTime>();
+
+            if (sessionLength.HasValue)
+            {
+                double sessionSegmentLength = sessionLength.Value / SegmentCount;
+
+                foreach (DetailedUsageResponseItem responseItem in allResponsesForSession)
+                {
+                    if (userStats.ContainsKey(responseItem.UserId))
+                    {
+                        // sanity checks 
+                        if (responseItem.StartPosition < sessionLength
+                            && responseItem.SecondsViewed > 0
+                            && responseItem.SecondsViewed < sessionLength
+                            && (responseItem.StartPosition + responseItem.SecondsViewed) < sessionLength)
+                        {
+                            int firstSegement = Convert.ToInt32(Math.Truncate(responseItem.StartPosition / sessionSegmentLength));
+                            int lastSegment = Convert.ToInt32(Math.Truncate((responseItem.StartPosition + responseItem.SecondsViewed) / sessionSegmentLength));
+
+                            for (int idx = firstSegement; idx < lastSegment; idx++)
+                            {
+                                userStats[responseItem.UserId][idx] = true;
+                            }
+                        }
+
+                        // Check for a more recent view
+                        if (responseItem.Time > lastViews[responseItem.UserId])
+                        {
+                            lastViews[responseItem.UserId] = responseItem.Time;
+                        }
+                    }
+                    else
+                    {
+                        bool[] userSegments = new bool[SegmentCount];
+                        // sanity checks 
+                        if (responseItem.StartPosition < sessionLength
+                            && responseItem.SecondsViewed > 0
+                            && responseItem.SecondsViewed < sessionLength
+                            && (responseItem.StartPosition + responseItem.SecondsViewed) < sessionLength)
+                        {
+                            int firstSegement = Convert.ToInt32(Math.Truncate(responseItem.StartPosition / sessionSegmentLength));
+                            int lastSegment = Convert.ToInt32(Math.Truncate((responseItem.StartPosition + responseItem.SecondsViewed) / sessionSegmentLength));
+
+                            for (int idx = firstSegement; idx < lastSegment; idx++)
+                            {
+                                userSegments[idx] = true;
+                            }
+                        }
+                        userStats.Add(responseItem.UserId, userSegments);
+                        lastViews.Add(responseItem.UserId, responseItem.Time);
+                    }
+                }
+            }
+            return userStats;
+        }
+
         private static string PrintStatsData(
             string authUserKey, 
-            string authPassword, 
-            DetailedUsageResponseItem responseItem,
+            string authPassword,
+            KeyValuePair<Guid, bool[]> userStat,
             Guid sessionID,
             string sessionName,
             string folderName,
-            double? sessionLength)
+            DateTime lastViewed)
         {
-            string userId = responseItem.UserId.ToString();
+            string userId = userStat.Key.ToString();
             string username = userId;
             if (AllUserIds.ContainsKey(userId))
             {
@@ -125,22 +197,21 @@ namespace PanoptoCollectAllStats
             else
             {
                 // Get the username.
-                username = GetUserNameFromId(authUserKey, authPassword, responseItem.UserId);
+                username = GetUserNameFromId(authUserKey, authPassword, userStat.Key);
                 // Save it for later.
                 AllUserIds[userId] = username;
             }
 
-            // Session ID, Session Name, username, start position, length, date, Folder
-            string usageFormat = "{0}, {1}, {2} , {3}, {4}, {5}, {6}, {7} \n";
+            // Session ID, Session Name, Username, % Viewed, Last View Date, Folder Name
+            string usageFormat = "{0}, {1}, {2} , {3}, {4}, {5}\n";
+            bool[] segments = userStat.Value;
             return String.Format(
                 usageFormat,
                 sessionID.ToString(),
                 sessionName,
                 username,
-                responseItem.StartPosition,
-                responseItem.SecondsViewed,
-                responseItem.SecondsViewed / sessionLength * 100,
-                responseItem.Time,
+                segments.Count(c => c).ToString(),
+                lastViewed,
                 folderName);
         }
 
@@ -167,7 +238,7 @@ namespace PanoptoCollectAllStats
 
         public static string GetAllSessionStats(string authUserKey, string authPassword, out string errorMessage)
         {
-            string sessionStats = "Session ID, Session Name, Username, Start Position (sec), Length (sec), % Viewed, Date Viewed, Folder,\n";
+            string sessionStats = "Session ID, Session Name, Username, % Viewed, Last View Date, Folder Name\n";
             //List<Guid> sessionIds = new List<Guid>();
             errorMessage = "Query in progress.";
 

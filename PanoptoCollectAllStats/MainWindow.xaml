@@ -11,11 +11,6 @@
                     <TextBox x:Name="UserID" HorizontalAlignment="Left" Margin="135,10,0,0" TextWrapping="Wrap" Text="admin" VerticalAlignment="Top" Width="271" Height="25"/>
                     <Label Content="Password:" HorizontalAlignment="Left" Height="25" Margin="10,45,0,0" VerticalAlignment="Top" Width="65"/>
                     <PasswordBox x:Name="UserPassword" HorizontalAlignment="Left" Height="25" Margin="134,45,0,0" VerticalAlignment="Top" Width="271" Password=""/>
-
-                    <Label x:Name="ErrorLogLabel" Content="Error Log:" HorizontalAlignment="Left" Height="25" Margin="10,115,0,0" VerticalAlignment="Top" Padding="5" />
-                    <ScrollViewer HorizontalAlignment="Left" Height="122" Margin="134,120,0,0" VerticalAlignment="Top" Width="350" Padding="0" VerticalScrollBarVisibility="Auto">
-                        <TextBlock x:Name="ErrorLog" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                    </ScrollViewer>
                 </Grid>
             </GroupBox>
 

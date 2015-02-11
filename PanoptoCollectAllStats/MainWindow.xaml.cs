@@ -39,9 +39,6 @@ namespace PanoptoCollectAllStats
         {
             LockAllFields();
             Status.Content = "Quering for stats...";
-
-            ErrorLog.Text = "";
-
             timer = new System.Timers.Timer(100);
             timer.Elapsed += DispatchUpload;
 
@@ -139,19 +136,7 @@ namespace PanoptoCollectAllStats
             int errorCode = Convert.ToInt16((e.UserState as string).Split('~')[0]);
             string msg = (e.UserState as string).Split('~')[1];
 
-            if (errorCode == -1)
-            {
-                Status.Content = msg;
-            }
-            else if (errorCode == 0)
-            {
-                Status.Content = "Creation process experienced error";
-                ErrorLog.Text = msg;
-            }
-            else
-            {
-                Status.Content = msg;
-            }
+            Status.Content = msg;
         }
 
         /// <summary>
