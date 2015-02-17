@@ -75,8 +75,8 @@ namespace PanoptoCollectAllStats
                                 usageAuth,
                                 sessionID,
                                 pagination,
-                                new DateTime(2015, 1, 1), // Years ago
-                                currentTime.AddHours(-10)); // Today
+                                new DateTime(2015, 1, 1), // All of 2015
+                                currentTime.AddHours(-9)); // Today
 
                             foreach (DetailedUsageResponseItem responseItem in usageResponse.PagedResponses)
                             {

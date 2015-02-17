@@ -99,7 +99,7 @@ namespace PanoptoCollectAllStats
         /// <param name="e">Arguments necessary to get the stats</param>
         private void ProcessStatsRequest(object sender, DoWorkEventArgs e)
         {
-
+            string statsTempDir = @"c:\temp\stats";
             BackgroundWorker bgw = sender as BackgroundWorker;
 
             // Variables needed to create user
@@ -112,8 +112,10 @@ namespace PanoptoCollectAllStats
             string statsFound = ManagementWrapper.GetAllSessionStats(userName, password, out errorMessage);
 
             // Write out the results
+            System.IO.Directory.CreateDirectory(statsTempDir);
+
             string fileName = "Stats_" + DateTime.Now.ToString("dd_MM_yyyy_hh_mm") + ".csv";
-            System.IO.File.WriteAllLines(@"C:\temp\" + fileName, new List<string> { statsFound });
+            System.IO.File.WriteAllLines(statsTempDir + "\\" + fileName, new List<string> { statsFound });
 
 
             // Handle overall status
