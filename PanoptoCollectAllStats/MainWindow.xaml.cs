@@ -17,6 +17,7 @@ namespace PanoptoCollectAllStats
         private static bool selfSigned = true; // Target server is a self-signed server
         private static bool hasBeenInitialized = false;
         private static System.Timers.Timer timer;
+        private string statsTempDir = @"c:\temp\stats";
 
         public MainWindow()
         {
@@ -99,7 +100,6 @@ namespace PanoptoCollectAllStats
         /// <param name="e">Arguments necessary to get the stats</param>
         private void ProcessStatsRequest(object sender, DoWorkEventArgs e)
         {
-            string statsTempDir = @"c:\temp\stats";
             BackgroundWorker bgw = sender as BackgroundWorker;
 
             // Variables needed to create user
@@ -111,21 +111,24 @@ namespace PanoptoCollectAllStats
             string errorMessage = null;
             string statsFound = ManagementWrapper.GetAllSessionStats(userName, password, out errorMessage);
 
-            // Write out the results
-            System.IO.Directory.CreateDirectory(statsTempDir);
-
-            string fileName = "Stats_" + DateTime.Now.ToString("dd_MM_yyyy_hh_mm") + ".csv";
-            System.IO.File.WriteAllLines(statsTempDir + "\\" + fileName, new List<string> { statsFound });
-
+            WriteToFile(statsFound);
 
             // Handle overall status
             bgw.ReportProgress(100, 1 + "~ Stats query complete.");
 
         }
 
+        /// <summary>
+        /// Write stats to designated file
+        /// </summary>
+        /// <param name="statsFound">Stats to write</param>
         private void WriteToFile(string statsFound)
         {
-            
+            // Write out the results
+            System.IO.Directory.CreateDirectory(statsTempDir);
+
+            string fileName = "Stats_" + DateTime.Now.ToString("dd_MM_yyyy_hh_mm") + ".csv";
+            System.IO.File.WriteAllLines(statsTempDir + "\\" + fileName, new List<string> { statsFound });
         }
 
         /// <summary>
