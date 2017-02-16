@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
+using System.IO;
 using System.Timers;
 using System.Windows;
-using System.Windows.Forms;
 
 namespace PanoptoCollectAllStats
 {
@@ -14,20 +12,12 @@ namespace PanoptoCollectAllStats
     /// </summary>
     public partial class MainWindow : Window
     {
-        private static bool selfSigned = true; // Target server is a self-signed server
         private static bool hasBeenInitialized = false;
         private static System.Timers.Timer timer;
-        private string statsTempDir = @"c:\temp\stats";
 
         public MainWindow()
         {
             InitializeComponent();
-
-            if (selfSigned)
-            {
-                // For self-signed servers
-                EnsureCertificateValidation();
-            }
         }
 
         /// <summary>
@@ -88,7 +78,7 @@ namespace PanoptoCollectAllStats
             bgw.WorkerReportsProgress = true;
             bgw.RunWorkerCompleted += new RunWorkerCompletedEventHandler(CreationComplete);
 
-            object[] args = new object[] { UserID.Text, UserPassword.Password };
+            object[] args = new object[] { ServerName.Text, UserID.Text, UserPassword.Password };
 
             bgw.RunWorkerAsync(args);
         }
@@ -104,31 +94,32 @@ namespace PanoptoCollectAllStats
 
             // Variables needed to create user
             object[] args = e.Argument as object[];
-            string userName = args[0] as string;
-            string password = args[1] as string;
-
+            string serverName = args[0] as string;
+            string userName = args[1] as string;
+            string password = args[2] as string;
 
             string errorMessage = null;
-            string statsFound = ManagementWrapper.GetAllSessionStats(userName, password, out errorMessage);
+            string statsFound = ManagementWrapper.GetAllSessionStats(serverName, userName, password, out errorMessage);
 
-            WriteToFile(statsFound);
+            string filePath = WriteToFile(statsFound);
 
             // Handle overall status
-            bgw.ReportProgress(100, 1 + "~ Stats query complete.");
+            bgw.ReportProgress(100, 1 + "~ Stats query complete. Wrote to " + filePath);
 
         }
 
         /// <summary>
-        /// Write stats to designated file
+        /// Write stats to a file in the current directory.
         /// </summary>
         /// <param name="statsFound">Stats to write</param>
-        private void WriteToFile(string statsFound)
+        /// <returns>Full path of written file.</returns>
+        private string WriteToFile(string statsFound)
         {
             // Write out the results
-            System.IO.Directory.CreateDirectory(statsTempDir);
+            string fileFullPath = string.Format("{0}\\Stats_{1:yyyy-MM-dd-HH-mm}.csv", Directory.GetCurrentDirectory(), DateTime.UtcNow);
+            System.IO.File.WriteAllLines(fileFullPath, new List<string> { statsFound });
 
-            string fileName = "Stats_" + DateTime.Now.ToString("dd_MM_yyyy_hh_mm") + ".csv";
-            System.IO.File.WriteAllLines(statsTempDir + "\\" + fileName, new List<string> { statsFound });
+            return fileFullPath;
         }
 
         /// <summary>
@@ -152,28 +143,6 @@ namespace PanoptoCollectAllStats
         private void CreationComplete(object sender, RunWorkerCompletedEventArgs e)
         {
             FreeAllFields();
-        }
-
-        //========================= Needed to use self-signed servers
-
-        /// <summary>
-        /// Ensures that our custom certificate validation has been applied
-        /// </summary>
-        public static void EnsureCertificateValidation()
-        {
-            if (!hasBeenInitialized)
-            {
-                ServicePointManager.ServerCertificateValidationCallback += new System.Net.Security.RemoteCertificateValidationCallback(CustomCertificateValidation);
-                hasBeenInitialized = true;
-            }
-        }
-
-        /// <summary>
-        /// Ensures that server certificate is authenticated
-        /// </summary>
-        private static bool CustomCertificateValidation(object sender, X509Certificate cert, X509Chain chain, System.Net.Security.SslPolicyErrors error)
-        {
-            return true;
         }
     }
 }

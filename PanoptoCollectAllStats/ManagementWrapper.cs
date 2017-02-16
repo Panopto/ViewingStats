@@ -4,6 +4,7 @@ using PanoptoCollectAllStats.UsageReporting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.ServiceModel;
 
 /// <summary>
 /// Sample C# that uses the Panopto PublicAPI
@@ -14,15 +15,24 @@ namespace PanoptoCollectAllStats
 
     public class ManagementWrapper
     {
-        private static int MaxPerPage = 25;
-        private static int SegmentCount = 100;
+        // Number of total sessions may be large and may not complete within reasonable time.
+        // As this is demonstration purpose, we limit the maximum sesion mumber with some constant.
+        private const int CapSessions = 100;
+
+        private const int MaxPerPage = 25;
+        private const int SegmentCount = 100;
         private static Dictionary<string, string> AllUserIds = new Dictionary<string, string>();
-        private static DateTime BeginDate = new DateTime(2015, 1, 1);
-        private static DateTime EndDate = DateTime.Now.AddHours(-9);
+        private static DateTime EndDate = DateTime.UtcNow;
+        private static DateTime BeginDate = EndDate - TimeSpan.FromDays(30);
+
+        private const string SessionManagementEndpointFormat = "https://{0}/Panopto/PublicAPI/4.6/SessionManagement.svc";
+        private const string UsageReportingEndpointFormat = "https://{0}/Panopto/PublicAPI/4.6/UsageReporting.svc";
+        private const string UserManagementEndpointFormat = "https://{0}/Panopto/PublicAPI/4.6/UserManagement.svc";
 
         /// <summary>
         /// Get stats for designated session
         /// </summary>
+        /// <param name="serverName">Server name</param>
         /// <param name="authUserKey">User name</param>
         /// <param name="authPassword">Password</param>
         /// <param name="sessionID">Session ID</param>
@@ -30,7 +40,7 @@ namespace PanoptoCollectAllStats
         /// <param name="folderName">Folder name</param>
         /// <param name="sessionLength">Session length</param>
         /// <returns>String containing stats for given session</returns>
-        public static string GetAllStatsForSession(string authUserKey, string authPassword, Guid sessionID, string sessionName, string folderName, double? sessionLength)
+        public static string GetAllStatsForSession(string serverName, string authUserKey, string authPassword, Guid sessionID, string sessionName, string folderName, double? sessionLength)
         {
             string sessionStats = String.Empty;
             List<DetailedUsageResponseItem> allResponsesForSession = new List<DetailedUsageResponseItem>();
@@ -53,7 +63,8 @@ namespace PanoptoCollectAllStats
                 folderName = folderName.Replace(",", "");
             }
 
-            UsageReportingClient urc = new UsageReportingClient();
+            UsageReportingClient urc = new UsageReportingClient(
+                new BasicHttpsBinding(), new EndpointAddress(string.Format(UsageReportingEndpointFormat, serverName)));
             UsageReporting.Pagination pagination = new UsageReporting.Pagination();
             pagination.MaxNumberResults = MaxPerPage;
             pagination.PageNumber = 0;
@@ -105,6 +116,7 @@ namespace PanoptoCollectAllStats
                         foreach (KeyValuePair<Guid, bool[]> userStat in userStatsCollection)
                         {
                             sessionStats += PrintStatsData(
+                                serverName,
                                 authUserKey,
                                 authPassword,
                                 userStat,
@@ -201,6 +213,7 @@ namespace PanoptoCollectAllStats
         /// <summary>
         /// Generate a string with stats with given data
         /// </summary>
+        /// <param name="serverName">Server name</param>
         /// <param name="authUserKey">User name</param>
         /// <param name="authPassword">Password</param>
         /// <param name="userStat">User stat for session</param>
@@ -210,6 +223,7 @@ namespace PanoptoCollectAllStats
         /// <param name="lastViewed">User's last viewed date for session</param>
         /// <returns>String containing stats for session for given user</returns>
         private static string PrintStatsData(
+            string serverName,
             string authUserKey, 
             string authPassword,
             KeyValuePair<Guid, bool[]> userStat,
@@ -227,7 +241,7 @@ namespace PanoptoCollectAllStats
             else
             {
                 // Get the username.
-                username = GetUserNameFromId(authUserKey, authPassword, userStat.Key);
+                username = GetUserNameFromId(serverName, authUserKey, authPassword, userStat.Key);
                 // Save it for later.
                 AllUserIds[userId] = username;
             }
@@ -248,11 +262,12 @@ namespace PanoptoCollectAllStats
         /// <summary>
         /// Get user name from user id
         /// </summary>
+        /// <param name="serverName">Server Name</param>
         /// <param name="authUserKey">User name</param>
         /// <param name="authPassword">Password</param>
         /// <param name="userGuid">user id</param>
         /// <returns>User name for given user id</returns>
-        private static string GetUserNameFromId(string authUserKey, string authPassword, Guid userGuid)
+        private static string GetUserNameFromId(string serverName, string authUserKey, string authPassword, Guid userGuid)
         {
             string username = String.Empty;
 
@@ -260,7 +275,8 @@ namespace PanoptoCollectAllStats
             auth.UserKey = authUserKey;
             auth.Password = authPassword;
 
-            UserManagementClient umc = new UserManagementClient();
+            UserManagementClient umc = new UserManagementClient(
+                new BasicHttpsBinding(), new EndpointAddress(string.Format(UserManagementEndpointFormat, serverName)));
             User[] users = umc.GetUsers(auth, new Guid[] { userGuid });
 
             if (users != null
@@ -274,19 +290,20 @@ namespace PanoptoCollectAllStats
         }
 
         /// <summary>
-        /// Get stats for all sessions user has access to
+        /// Get stats for all sessions user has access to.
         /// </summary>
+        /// <param name="serverName">Server name</param>
         /// <param name="authUserKey">User name</param>
         /// <param name="authPassword">Password</param>
         /// <param name="errorMessage">Error message</param>
         /// <returns>String containing stats of all sessions</returns>
-        public static string GetAllSessionStats(string authUserKey, string authPassword, out string errorMessage)
+        public static string GetAllSessionStats(string serverName, string authUserKey, string authPassword, out string errorMessage)
         {
             string sessionStats = "Session ID, Session Name, Username, % Viewed, Last View Date, Folder Name\n";
             //List<Guid> sessionIds = new List<Guid>();
             errorMessage = "Query in progress.";
 
-            if (!String.IsNullOrWhiteSpace(authUserKey) && !String.IsNullOrWhiteSpace(authPassword))
+            if (!String.IsNullOrWhiteSpace(serverName) && !String.IsNullOrWhiteSpace(authUserKey) && !String.IsNullOrWhiteSpace(authPassword))
             {
                 try
                 {
@@ -297,43 +314,39 @@ namespace PanoptoCollectAllStats
                         Password = authPassword
                     };
 
-                    SessionManagementClient smc = new SessionManagementClient();
+                    SessionManagementClient smc = new SessionManagementClient(
+                        new BasicHttpsBinding(), new EndpointAddress(string.Format(SessionManagementEndpointFormat, serverName)));
                     ListSessionsRequest request = new ListSessionsRequest();
+
                     SessionManagement.Pagination pagination = new SessionManagement.Pagination();
                     pagination.MaxNumberResults = MaxPerPage;
                     pagination.PageNumber = 0;
-
-                    // Collect data for one page
                     request.Pagination = pagination;
-                    ListSessionsResponse sessionsResponse = smc.GetSessionsList(sessionAuth, request, null);
 
-                    Session[] sessions = sessionsResponse.Results;
-                    foreach (Session session in sessions)
-                    {
-                        sessionStats += GetAllStatsForSession(authUserKey, authPassword, session.Id, session.Name, session.FolderName, session.Duration);
-                    }
+                    // Query newer sessions first.
+                    request.SortBy = SessionSortField.Date;
+                    request.SortIncreasing = false;
 
-                    // Repeat process for all pages if more than one page exists
-                    if (sessionsResponse.TotalNumberResults > MaxPerPage)
+                    int totalPages = int.MaxValue; // not set yet
+
+                    while (request.Pagination.PageNumber < totalPages)
                     {
-                        int totalPages = sessionsResponse.TotalNumberResults / MaxPerPage;
-                        if (sessionsResponse.TotalNumberResults % MaxPerPage != 0)
+                        ListSessionsResponse sessionsResponse = smc.GetSessionsList(sessionAuth, request, null);
+
+                        Session[] sessions = sessionsResponse.Results;
+                        foreach (Session session in sessions)
                         {
-                            totalPages += 1;
+                            sessionStats += GetAllStatsForSession(serverName, authUserKey, authPassword, session.Id, session.Name, session.FolderName, session.Duration);
                         }
 
-                        for (int page = 1; page < totalPages; page++)
+                        // This is examined at the first call.
+                        if (totalPages == int.MaxValue)
                         {
-                            request.Pagination.PageNumber = page;
-
-                            sessionsResponse = smc.GetSessionsList(sessionAuth, request, null);
-
-                            sessions = sessionsResponse.Results;
-                            foreach (Session session in sessions)
-                            {
-                                sessionStats += GetAllStatsForSession(authUserKey, authPassword, session.Id, session.Name, session.FolderName, session.Duration);
-                            }
+                            int maxEntries = Math.Min(sessionsResponse.TotalNumberResults, CapSessions);
+                            totalPages = (maxEntries + MaxPerPage - 1) / MaxPerPage;
                         }
+
+                        request.Pagination.PageNumber++;
                     }
                 }
 
@@ -345,7 +358,7 @@ namespace PanoptoCollectAllStats
             }
             else
             {
-                errorMessage = "Please enter username and password.";
+                errorMessage = "Please enter servername, username, and password.";
             }
 
             return sessionStats;
