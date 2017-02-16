@@ -1,0 +1,6 @@
+.git
+.vs
+packages/
+bin/
+obj/
+
